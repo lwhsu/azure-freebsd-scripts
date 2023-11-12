@@ -37,8 +37,10 @@ esac
 
 SKU_INFO=${2}-${3}-${4}
 
-OFFER=FreeBSD-${VERSION}-testing
-SKU=${VERSION}-${SKU_INFO}-testing
+#OFFER=FreeBSD-${VERSION}-testing
+OFFER=FreeBSD-${VERSION}
+#SKU=${VERSION}-${SKU_INFO}-testing
+SKU=${VERSION}-${SKU_INFO}
 
 IMAGE_NAME=FreeBSD-${SKU}
 

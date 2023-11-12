@@ -29,10 +29,12 @@ DATE=$5
 
 SKU_INFO=${2}-${3}-${4}
 
-SKU=${VERSION}-${SKU_INFO}-testing
+#SKU=${VERSION}-${SKU_INFO}-testing
+SKU=${VERSION}-${SKU_INFO}
 
 LOCATION=eastus
-TARGET_REGIONS="${LOCATION} southcentralus"
+#TARGET_REGIONS="${LOCATION} southcentralus"
+TARGET_REGIONS="${LOCATION}"
 
 REVISION=00
 if [ -n "${DATE}" ]; then
