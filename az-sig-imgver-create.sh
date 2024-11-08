@@ -42,7 +42,7 @@ if [ -n "${DATE}" ]; then
 	VHD=FreeBSD-${VERSION}-${ARCH}-${VMFS}-${DATE}.vhd
 else
 	IMAGE_VERSION=$(TZ=GMT date +%Y.%m%d).${REVISION}
-	VHD=FreeBSD-${VERSION}-${ARCH}-azure-${VMFS}.vhd
+	VHD=FreeBSD-${VERSION}-${ARCH}-${VMFS}.vhd
 fi
 
 IMAGE_NAME=FreeBSD-${SKU}
