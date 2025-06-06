@@ -57,6 +57,7 @@ az sig image-definition create \
 	--architecture ${ARCH} \
 	--features "${FEATURES}"
 # Possible --features parameters:
+# Documented at https://learn.microsoft.com/en-us/azure/virtual-machines/shared-image-galleries?wt.mc_id=knowledgesearch_inproduct_copilot-in-azure&tabs=vmsource%2Cazure-cli#image-definitions
 #  DiskControllerTypes=SCSI,NVMe
 #  IsHibernateSupported=true
 #  IsAcceleratedNetworkSupported=true
