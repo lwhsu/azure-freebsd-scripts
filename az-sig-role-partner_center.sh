@@ -5,12 +5,9 @@ set -ex
 . config.sh
 . subr.sh
 
-VERSION=$1
-
 require SUBSCRIPTION
 require RESOURCE_GROUP
 require GALLERY_NAME
-require VERSION
 
 # Get the Resource Id of your Azure Compute Gallery. The result is the <gallery-id>.
 GALLERY_ID=$(
