@@ -57,4 +57,4 @@ az sig image-version create \
 	--target-regions ${TARGET_REGIONS} \
 	--os-vhd-storage-account /subscriptions/${SUBSCRIPTION}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Storage/storageAccounts/${STORAGE_ACCOUNT_NAME} \
 	--os-vhd-uri https://${STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${STORAGE_ACCOUNT_CONTAINER}/${VHD} \
-#	--no-wait
+	--no-wait
