@@ -48,6 +48,7 @@ Example: Creating FreeBSD 14.4-RELEASE offer
   Output: offer-create_freebsd-14_4.json
 
   Options:
+    -T RC1                            SIG image tag (default: RELEASE)
     -g 2026.0301.00                   Use a specific SIG version for all archs
     --arm64-sig-version 2026.0315.00  Override SIG version for arm64 only
     -g none                           Empty vmImageVersions (add images later)
@@ -65,6 +66,29 @@ Example: Creating FreeBSD 14.4-RELEASE offer
 
   ./pc-vm-offer-clone.sh -f resource-tree_freebsd-14_3_draft.json \
     -t 14.4 -g 2026.0301.00 --arm64-sig-version 2026.0315.00
+
+  Using RC/BETA images for testing (-T option):
+
+  The -T option changes which SIG image definitions are referenced,
+  without changing the offer identity. This is useful for testing an
+  offer with RC or BETA images before the final RELEASE images exist.
+
+  ./pc-vm-offer-clone.sh -f resource-tree_freebsd-14_3_draft.json \
+    -t 14.4 -T RC1 -g 2026.0301.00
+
+  This creates the offer as freebsd-14_4 (FreeBSD 14.4-RELEASE) but
+  the SIG image paths reference FreeBSD-14.4-RC1-amd64-ufs-gen1 etc.
+  When RELEASE images are ready, re-clone without -T or update
+  the tech config via pc-vm-offer-update.sh.
+
+  termsOfUse license check:
+
+  The clone script automatically fetches the current FreeBSD license
+  from https://www.freebsd.org/copyright/freebsd-license/ and compares
+  it with the template's termsOfUse text. If only the copyright year
+  has changed (e.g., 1992-2025 -> 1992-2026), it auto-updates. If the
+  license text itself has changed, it shows a diff and asks whether to
+  use the upstream text.
 
 
 3. Review the generated config
@@ -91,6 +115,7 @@ Example: Creating FreeBSD 14.4-RELEASE offer
   Differences should only be in:
     - Version strings (14.3 -> 14.4, 14_3 -> 14_4)
     - Ordinal text ("fourth release" -> "fifth release")
+    - Copyright year in termsOfUse (if auto-updated)
     - SIG image paths/versions
     - No durable IDs in the new file (expected)
 
@@ -200,6 +225,10 @@ Review an offer from file:
 Compare two offers:
   ./pc-vm-offer-compare.sh resource-tree_freebsd-14_3_draft.json \
     resource-tree_freebsd-15_0_draft.json
+
+Clone with RC images for testing:
+  ./pc-vm-offer-clone.sh -f resource-tree_freebsd-14_3_draft.json \
+    -t 14.4 -T RC1 -g 2026.0301.00
 
 Interactive export (pick from list):
   ./pc-vm-offer-export.sh
