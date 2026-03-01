@@ -15,6 +15,7 @@
 #   sig_base  SIG resource path prefix, e.g.,
 #             "/subscriptions/.../resourceGroups/.../providers/Microsoft.Compute/galleries/FreeBSD/images"
 #   tenant_id Tenant ID for SIG sharedImage references
+#   terms_of_use  Updated termsOfUse text (empty string = keep original)
 
 # Helper: normalize $schema URLs to schema.mp.microsoft.com
 def normalize_schema:
@@ -219,7 +220,7 @@ def replace_versions:
     end
 
   elif $rtype == "property" then
-    .
+    if ($terms_of_use | length) > 0 then .termsOfUse = $terms_of_use else . end
 
   elif $rtype == "reseller" then
     .

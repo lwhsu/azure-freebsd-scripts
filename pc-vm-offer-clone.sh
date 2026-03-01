@@ -136,6 +136,104 @@ SRC_DOT="$(echo "$SRC_UND" | tr '_' '.')"
 echo "Source offer: ${SRC_EXTID_PARSED} (version ${SRC_DOT})"
 echo ""
 
+# Step 2b: Check termsOfUse against upstream FreeBSD license
+FREEBSD_LICENSE_URL="https://www.freebsd.org/copyright/freebsd-license/"
+TERMS_OF_USE=""
+
+echo "Checking termsOfUse against ${FREEBSD_LICENSE_URL}..."
+
+# Extract current termsOfUse from the source template
+_tpl_terms="$(printf '%s' "$SRC_JSON" | jq -r '
+	[.resources[] | select(."$schema" | test("schema/property/"))][0].termsOfUse // empty
+')"
+
+if [ -z "$_tpl_terms" ]; then
+	echo "  WARNING: No termsOfUse found in source template."
+else
+	# Fetch the current license from freebsd.org
+	# Extract text from <div id="contentwrap"> between <h1> and <hr>
+	_fetched_html="$(curl -fsS "$FREEBSD_LICENSE_URL" 2>/dev/null || true)"
+
+	if [ -z "$_fetched_html" ]; then
+		echo "  WARNING: Could not fetch license from ${FREEBSD_LICENSE_URL}."
+		echo "           Using termsOfUse from source template as-is."
+	else
+		# Extract text: strip HTML tags, normalize whitespace
+		# Get content between <h1> and the "Legal Home" link
+		_fetched_text="$(printf '%s' "$_fetched_html" \
+			| sed -n '/<h1>The FreeBSD Copyright/,/<a href="\.\.">Legal Home/p' \
+			| sed '/<a href="\.\.">Legal Home/d' \
+			| sed 's/<[^>]*>//g' \
+			| sed 's/&amp;/\&/g; s/&lt;/</g; s/&gt;/>/g; s/&quot;/"/g; s/&#39;/'"'"'/g' \
+			| sed '/^[[:space:]]*$/d' \
+			| sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
+			| tr '\n' ' ' \
+			| sed 's/  */ /g; s/^ //; s/ $//')"
+
+		# Normalize template text the same way for comparison
+		_tpl_normalized="$(printf '%s' "$_tpl_terms" \
+			| tr '\n' ' ' \
+			| sed 's/  */ /g; s/^ //; s/ $//')"
+
+		# Strip copyright years and list markers for content comparison
+		# Matches patterns like "1992-2025" or "1992-2026"
+		# Also strip "1. " / "2. " list markers since HTML <ol><li> doesn't include them
+		_fetched_noyear="$(printf '%s' "$_fetched_text" | sed 's/[0-9]*-[0-9]*/YEARS/g')"
+		_tpl_noyear="$(printf '%s' "$_tpl_normalized" | sed 's/[0-9]*-[0-9]*/YEARS/g; s/ [0-9]\. / /g')"
+
+		if [ "$_fetched_noyear" = "$_tpl_noyear" ]; then
+			# Text is the same modulo years -- check if years actually differ
+			_fetched_years="$(printf '%s' "$_fetched_text" | sed -n 's/.*Copyright \([0-9]*-[0-9]*\).*/\1/p')"
+			_tpl_years="$(printf '%s' "$_tpl_normalized" | sed -n 's/.*Copyright \([0-9]*-[0-9]*\).*/\1/p')"
+
+			if [ "$_fetched_years" != "$_tpl_years" ]; then
+				echo "  Copyright year updated: ${_tpl_years} -> ${_fetched_years}"
+				echo "  Auto-updating termsOfUse."
+				TERMS_OF_USE="$(printf '%s' "$_tpl_terms" | sed "s/${_tpl_years}/${_fetched_years}/g")"
+			else
+				echo "  termsOfUse is up to date."
+			fi
+		else
+			echo ""
+			echo "  WARNING: FreeBSD license text has changed beyond copyright years!"
+			echo "  Template and upstream differ. Please review."
+			echo ""
+
+			# Show diff
+			_tmp_tpl="$(mktemp)"
+			_tmp_web="$(mktemp)"
+			printf '%s\n' "$_tpl_normalized" | fmt -w 72 > "$_tmp_tpl"
+			printf '%s\n' "$_fetched_text" | fmt -w 72 > "$_tmp_web"
+			diff -u --label "template" --label "freebsd.org" "$_tmp_tpl" "$_tmp_web" || true
+			rm -f "$_tmp_tpl" "$_tmp_web"
+
+			echo ""
+			printf "  Use upstream license text? [y/N] "
+			read -r _use_upstream
+			case "$_use_upstream" in
+			[yY]|[yY][eE][sS])
+				# Reconstruct termsOfUse from fetched text with proper formatting
+				# Re-extract with newlines preserved
+				TERMS_OF_USE="$(printf '%s' "$_fetched_html" \
+					| sed -n '/<h1>The FreeBSD Copyright/,/<a href="\.\.">Legal Home/p' \
+					| sed '/<a href="\.\.">Legal Home/d' \
+					| sed 's/<[^>]*>//g' \
+					| sed 's/&amp;/\&/g; s/&lt;/</g; s/&gt;/>/g; s/&quot;/"/g' \
+					| sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
+					| sed '/^$/{ N; s/\n$//; }' \
+					| cat -s)"
+				echo "  Using upstream license text."
+				;;
+			*)
+				echo "  Keeping template termsOfUse as-is."
+				;;
+			esac
+		fi
+	fi
+fi
+
+echo ""
+
 # Step 3: Resolve SIG image versions
 # Build the sig_versions JSON object
 SIG_BASE="/subscriptions/${SUBSCRIPTION}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Compute/galleries/${GALLERY_NAME}/images"
@@ -231,7 +329,8 @@ RESOURCES_JSON="$(printf '%s' "$SRC_JSON" | jq -f "${SCRIPT_DIR}/clone-offer.jq"
 	--argjson sig_versions "$SIG_VERSIONS_JSON" \
 	--arg sig_tag "$SIG_TAG" \
 	--arg sig_base "$SIG_BASE" \
-	--arg tenant_id "$TENANT_ID")"
+	--arg tenant_id "$TENANT_ID" \
+	--arg terms_of_use "$TERMS_OF_USE")"
 
 # Step 5: Wrap in /configure envelope and write output
 CONFIGURE_JSON="$(printf '%s' "$RESOURCES_JSON" | jq '{
