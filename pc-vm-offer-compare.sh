@@ -69,6 +69,14 @@ jq "$NORMALIZE_FILTER" "$2" > "$_tmp_b"
 _label_a="$(basename "$1")"
 _label_b="$(basename "$2")"
 
-if diff -u --label "$_label_a" --label "$_label_b" "$_tmp_a" "$_tmp_b"; then
+_diff_output="$(diff --color=always -u --label "$_label_a" --label "$_label_b" "$_tmp_a" "$_tmp_b" || true)"
+
+if [ -z "$_diff_output" ]; then
 	echo "(no differences after normalization)"
+else
+	if [ -t 1 ] && command -v less >/dev/null 2>&1; then
+		printf '%s\n' "$_diff_output" | less -R
+	else
+		printf '%s\n' "$_diff_output"
+	fi
 fi

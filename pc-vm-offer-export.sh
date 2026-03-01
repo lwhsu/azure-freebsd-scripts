@@ -79,6 +79,6 @@ echo ""
 
 tree_json="$(pc_get_resource_tree "$product_durable" "$TARGET_TYPE")"
 out="resource-tree_${offer_extid}_${TARGET_TYPE}.json"
-printf '%s\n' "$tree_json" > "$out"
+printf '%s\n' "$tree_json" | jq . > "$out"
 
 echo "Exported resource-tree to: $out"
