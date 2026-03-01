@@ -11,6 +11,7 @@
 #   sig_versions  JSON object mapping "ARCH-FSTYPE-GEN" to SIG version string
 #                 e.g., {"amd64-ufs-gen1":"2026.0301.00","arm64-zfs-gen2":"2026.0315.00"}
 #                 Empty object {} means no vmImageVersions
+#   sig_tag   SIG image definition tag, e.g., "RELEASE", "RC1", "BETA1"
 #   sig_base  SIG resource path prefix, e.g.,
 #             "/subscriptions/.../resourceGroups/.../providers/Microsoft.Compute/galleries/FreeBSD/images"
 #   tenant_id Tenant ID for SIG sharedImage references
@@ -194,7 +195,7 @@ def replace_versions:
                 sourceType: "sharedImageGallery",
                 sharedImage: {
                   tenantId: $tenant_id,
-                  resourceId: ($sig_base + "/FreeBSD-" + $tgt_dot + "-RELEASE-" +
+                  resourceId: ($sig_base + "/FreeBSD-" + $tgt_dot + "-" + $sig_tag + "-" +
                     ($key | split("-") | .[0]) + "-" +
                     ($key | split("-") | .[1]) + "-" +
                     ($key | split("-") | .[2]) +

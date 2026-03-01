@@ -14,12 +14,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 usage() {
 	cat >&2 <<'EOF'
 Usage: pc-vm-offer-clone.sh [-s externalId | -f file.json] -t VERSION
-                             [-o ORDINAL] [-g SIG_VERSION]
+                             [-T TAG] [-o ORDINAL] [-g SIG_VERSION]
                              [--arm64-sig-version VER] [-O output.json]
 
   -s EXTID       Source offer externalId (fetches current draft from API)
   -f FILE        Source resource tree JSON file (local)
   -t VERSION     Target version, e.g., "14.4"
+  -T TAG         SIG image definition tag (default: RELEASE)
+                 e.g., "RC1" uses FreeBSD-14.4-RC1-amd64-ufs-gen1
+                 The offer itself still targets the VERSION release.
   -o ORDINAL     Ordinal text, e.g., "fifth release"
                  Default: derived from minor version
   -g SIG_VERSION SIG image version for all architectures (e.g., 2026.0301.00)
@@ -62,6 +65,7 @@ discover_sig_version() {
 SRC_EXTID=""
 SRC_FILE=""
 TGT_VERSION=""
+SIG_TAG="RELEASE"
 ORDINAL=""
 SIG_VERSION=""
 ARM64_SIG_VERSION=""
@@ -72,6 +76,7 @@ while [ $# -gt 0 ]; do
 	-s) SRC_EXTID="$2"; shift 2 ;;
 	-f) SRC_FILE="$2"; shift 2 ;;
 	-t) TGT_VERSION="$2"; shift 2 ;;
+	-T) SIG_TAG="$2"; shift 2 ;;
 	-o) ORDINAL="$2"; shift 2 ;;
 	-g) SIG_VERSION="$2"; shift 2 ;;
 	--arm64-sig-version) ARM64_SIG_VERSION="$2"; shift 2 ;;
@@ -102,6 +107,7 @@ fi
 
 echo "Target: FreeBSD ${TGT_VERSION}-RELEASE"
 echo "Offer ID: ${TGT_EXTID}"
+echo "SIG tag: ${SIG_TAG}"
 echo "Ordinal: ${ORDINAL}"
 echo "Output: ${OUTPUT_FILE}"
 echo ""
@@ -192,7 +198,7 @@ else
 		_arch="$(echo "$key" | cut -d- -f1)"
 		_fstype="$(echo "$key" | cut -d- -f2)"
 		_gen="$(echo "$key" | cut -d- -f3)"
-		_imgdef="FreeBSD-${TGT_VERSION}-RELEASE-${_arch}-${_fstype}-${_gen}"
+		_imgdef="FreeBSD-${TGT_VERSION}-${SIG_TAG}-${_arch}-${_fstype}-${_gen}"
 		_ver="$(discover_sig_version "$_imgdef")"
 		if [ -n "$_ver" ]; then
 			echo "  ${key}: ${_ver} (from ${_imgdef})"
@@ -223,6 +229,7 @@ RESOURCES_JSON="$(printf '%s' "$SRC_JSON" | jq -f "${SCRIPT_DIR}/clone-offer.jq"
 	--arg ordinal "$ORDINAL" \
 	--arg branch "$TGT_MAJOR" \
 	--argjson sig_versions "$SIG_VERSIONS_JSON" \
+	--arg sig_tag "$SIG_TAG" \
 	--arg sig_base "$SIG_BASE" \
 	--arg tenant_id "$TENANT_ID")"
 
