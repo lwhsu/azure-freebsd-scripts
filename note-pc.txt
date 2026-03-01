@@ -1,0 +1,205 @@
+Partner Center VM Offer Automation
+===================================
+
+Prerequisites:
+  - curl, jq, diff, mktemp (standard on FreeBSD)
+  - az CLI (for SIG image version auto-discovery)
+  - config.sh with TENANT_ID, CLIENT_ID, CLIENT_SECRET, SUBSCRIPTION,
+    RESOURCE_GROUP, GALLERY_NAME
+
+Scripts overview:
+  pc-subr.sh              Shared API library (sourced by other scripts)
+  clone-offer.jq          jq filter for resource-tree transformation
+  pc-vm-offer-export.sh   List offers and export resource-tree JSON
+  pc-vm-offer-clone.sh    Generate new offer JSON from existing offer (local)
+  pc-vm-offer-create.sh   Submit configure JSON to create offer in Partner Center
+  pc-vm-offer-update.sh   Extract/diff/submit resource updates to existing offer
+  pc-vm-offer-review.sh   Human-readable summary of an offer
+  pc-vm-offer-compare.sh  Normalized diff of two resource trees
+  pc-vm-offer-submit.sh   Submit offer to preview or go live
+  pc-vm-offer-status.sh   Check job or submission status
+
+---
+
+Example: Creating FreeBSD 14.4-RELEASE offer
+=============================================
+
+1. Export the source offer (14.3) if not already done
+-----------------------------------------------------
+
+  NON_INTERACTIVE_OFFER=freebsd-14_3 ./pc-vm-offer-export.sh
+
+  This creates resource-tree_freebsd-14_3_draft.json.
+  Skip this step if the file already exists.
+
+
+2. Generate the new offer JSON locally
+--------------------------------------
+
+  From a local file (fully offline if -g is used):
+
+  ./pc-vm-offer-clone.sh -f resource-tree_freebsd-14_3_draft.json -t 14.4
+
+  Or fetch the source directly from the API:
+
+  ./pc-vm-offer-clone.sh -s freebsd-14_3 -t 14.4
+
+  This auto-discovers SIG image versions via az CLI.
+  Output: offer-create_freebsd-14_4.json
+
+  Options:
+    -g 2026.0301.00                   Use a specific SIG version for all archs
+    --arm64-sig-version 2026.0315.00  Override SIG version for arm64 only
+    -g none                           Empty vmImageVersions (add images later)
+    -o "fifth release"                Override ordinal text (default: auto)
+    -O custom-output.json             Override output filename
+
+  The ordinal defaults to the minor version number:
+    14.0 -> "first release"
+    14.1 -> "second release"
+    14.2 -> "third release"
+    14.3 -> "fourth release"
+    14.4 -> "fifth release"
+
+  Example with explicit SIG versions:
+
+  ./pc-vm-offer-clone.sh -f resource-tree_freebsd-14_3_draft.json \
+    -t 14.4 -g 2026.0301.00 --arm64-sig-version 2026.0315.00
+
+
+3. Review the generated config
+------------------------------
+
+  ./pc-vm-offer-review.sh -f offer-create_freebsd-14_4.json
+
+  Check:
+    - Product externalId: freebsd-14_4
+    - Plan externalIds: 14_4-release-ufs, 14_4-release-zfs
+    - Listing title: FreeBSD 14.4-RELEASE
+    - Short description ordinal: "fifth release"
+    - Release notes/readme/errata links point to 14.4R
+    - SKU IDs: 14_4-release-ufs, 14_4-release-amd64-gen2-ufs, etc.
+    - vmImageVersions: correct SIG paths or empty
+
+
+4. Compare with source to verify only version-specific fields changed
+---------------------------------------------------------------------
+
+  ./pc-vm-offer-compare.sh resource-tree_freebsd-14_3_draft.json \
+    offer-create_freebsd-14_4.json
+
+  Differences should only be in:
+    - Version strings (14.3 -> 14.4, 14_3 -> 14_4)
+    - Ordinal text ("fourth release" -> "fifth release")
+    - SIG image paths/versions
+    - No durable IDs in the new file (expected)
+
+
+5. (Optional) Edit the generated JSON manually
+-----------------------------------------------
+
+  vi offer-create_freebsd-14_4.json
+
+  For example, to adjust the description or add extra links.
+
+
+6. Create the offer in Partner Center
+--------------------------------------
+
+  ./pc-vm-offer-create.sh -f offer-create_freebsd-14_4.json
+
+  This POSTs to /configure, polls for completion, and reports
+  the new product durable ID on success.
+
+
+7. Export the new offer back and verify
+---------------------------------------
+
+  NON_INTERACTIVE_OFFER=freebsd-14_4 ./pc-vm-offer-export.sh
+  ./pc-vm-offer-review.sh -f resource-tree_freebsd-14_4_draft.json
+
+
+8. If corrections are needed
+----------------------------
+
+  Extract a resource for editing:
+
+  ./pc-vm-offer-update.sh -e freebsd-14_4 -R listing -o listing-edit.json
+  vi listing-edit.json
+
+  Preview the diff (no submission):
+
+  ./pc-vm-offer-update.sh -e freebsd-14_4 -r listing-edit.json -d
+
+  Submit the changes (shows diff and asks for confirmation):
+
+  ./pc-vm-offer-update.sh -e freebsd-14_4 -r listing-edit.json
+
+  Other resource types:
+    -R plan-listing
+    -R virtual-machine-plan-technical-configuration
+    -R price-and-availability-offer
+    -R price-and-availability-plan
+
+
+9. Add SIG images later (if clone used -g none)
+------------------------------------------------
+
+  ./pc-vm-offer-update.sh -e freebsd-14_4 \
+    -R virtual-machine-plan-technical-configuration -o tech-config.json
+  vi tech-config.json    # add vmImageVersions entries
+  ./pc-vm-offer-update.sh -e freebsd-14_4 -r tech-config.json
+
+
+10. Submit to preview
+---------------------
+
+  ./pc-vm-offer-submit.sh -e freebsd-14_4 -t preview
+
+
+11. Poll for certification (~24-48h)
+-------------------------------------
+
+  ./pc-vm-offer-status.sh -j <JOB_ID> -w
+
+  Or check without waiting:
+
+  ./pc-vm-offer-status.sh -j <JOB_ID>
+  ./pc-vm-offer-status.sh -j <JOB_ID> -d    # with full error detail
+
+  Or list submissions for the offer:
+
+  ./pc-vm-offer-status.sh -e freebsd-14_4
+
+
+12. Go live
+-----------
+
+  ./pc-vm-offer-submit.sh -e freebsd-14_4 -t live -s <PREVIEW_SUBMISSION_ID>
+
+  The preview submission ID can be found via:
+
+  ./pc-vm-offer-status.sh -e freebsd-14_4
+
+---
+
+Quick reference: common operations
+===================================
+
+Export an offer:
+  NON_INTERACTIVE_OFFER=freebsd-14_3 ./pc-vm-offer-export.sh
+  TARGET_TYPE=live NON_INTERACTIVE_OFFER=freebsd-14_3 ./pc-vm-offer-export.sh
+
+Review an offer from API:
+  ./pc-vm-offer-review.sh -e freebsd-14_3
+  ./pc-vm-offer-review.sh -e freebsd-14_3 -t live
+
+Review an offer from file:
+  ./pc-vm-offer-review.sh -f resource-tree_freebsd-14_3_draft.json
+
+Compare two offers:
+  ./pc-vm-offer-compare.sh resource-tree_freebsd-14_3_draft.json \
+    resource-tree_freebsd-15_0_draft.json
+
+Interactive export (pick from list):
+  ./pc-vm-offer-export.sh
