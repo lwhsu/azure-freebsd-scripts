@@ -92,6 +92,19 @@ fi
 # Load the edited resource(s)
 _edited="$(jq '.' "$RESOURCE_FILE")"
 
+# Unwrap resource-tree or configure envelope if present,
+# filtering out API-managed resources (customer-leads, submission, resource-tree)
+_edited="$(printf '%s' "$_edited" | jq '
+	if type == "object" and .resources then
+		[.resources[] | select(
+			(."$schema" | test("customer-leads|submission") | not) and
+			(."$schema" | test("resource-tree") | not)
+		)]
+	elif type == "array" then .
+	else [.]
+	end
+')"
+
 # Determine resource type(s) from the edited file
 _types="$(printf '%s' "$_edited" | jq -r '
 	if type == "array" then
@@ -147,8 +160,12 @@ rm -f "$_tmp_current" "$_tmp_edited"
 _resources="$(printf '%s' "$_edited" | jq --arg pid "$_durable" '
 	(if type == "array" then . else [.] end) |
 	[.[] |
-		# Ensure product reference uses durable ID
-		if .product and (.product | type) == "string" then . else .product = $pid end
+		# Add product reference for non-product resources that lack one
+		if (."$schema" | test("schema/product/") | not) and
+		   (.product == null or (.product | type) != "string") then
+			.product = $pid
+		else .
+		end
 	]
 ')"
 
