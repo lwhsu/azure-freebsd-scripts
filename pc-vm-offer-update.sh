@@ -183,9 +183,9 @@ _resources="$(printf '%s' "$_edited" | jq --arg pid "$_durable" '
 		# Normalize schema URLs to schema.mp.microsoft.com
 		."$schema" |= gsub("https://product-ingestion\\.azureedge\\.net/schema/";
 		                    "https://schema.mp.microsoft.com/schema/") |
-		# Add product reference for non-product resources that lack one
-		if (."$schema" | test("schema/product/") | not) and
-		   (.product == null or (.product | type) != "string") then
+		# Always set product reference to the resolved durable ID
+		# (overrides any stale/wrong product ref from the input file)
+		if (."$schema" | test("schema/product/") | not) then
 			.product = $pid
 		else .
 		end
