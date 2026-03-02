@@ -51,7 +51,9 @@ pc_ensure_token() {
 pc_api_get() {
 	pc_ensure_token
 	_path="$1"; shift
-	curl -fsS --get \
+	_pc_get_tmp="$(mktemp)"
+	_pc_get_http="$(curl -sS --get \
+		-o "$_pc_get_tmp" -w '%{http_code}' \
 		"${PC_GRAPH_BASE}${_path}" \
 		-H "Authorization: Bearer ${PC_TOKEN}" \
 		-H "Accept: application/json" \
@@ -59,16 +61,34 @@ pc_api_get() {
 			k="${kv%%=*}"
 			v="${kv#*=}"
 			printf -- " --data-urlencode %s=%s" "$k" "$v"
-		done)
+		done))"
+	if [ "$_pc_get_http" -ge 400 ]; then
+		echo "ERROR: HTTP ${_pc_get_http} from GET ${PC_GRAPH_BASE}${_path}" >&2
+		cat "$_pc_get_tmp" >&2
+		rm -f "$_pc_get_tmp"
+		return 1
+	fi
+	cat "$_pc_get_tmp"
+	rm -f "$_pc_get_tmp"
 }
 
 # GET with a full URL (e.g., nextLink pagination)
 pc_api_get_url() {
 	pc_ensure_token
-	curl -fsS --get \
+	_pc_gurl_tmp="$(mktemp)"
+	_pc_gurl_http="$(curl -sS --get \
+		-o "$_pc_gurl_tmp" -w '%{http_code}' \
 		"$1" \
 		-H "Authorization: Bearer ${PC_TOKEN}" \
-		-H "Accept: application/json"
+		-H "Accept: application/json")"
+	if [ "$_pc_gurl_http" -ge 400 ]; then
+		echo "ERROR: HTTP ${_pc_gurl_http} from GET $1" >&2
+		cat "$_pc_gurl_tmp" >&2
+		rm -f "$_pc_gurl_tmp"
+		return 1
+	fi
+	cat "$_pc_gurl_tmp"
+	rm -f "$_pc_gurl_tmp"
 }
 
 # POST JSON to a full URL

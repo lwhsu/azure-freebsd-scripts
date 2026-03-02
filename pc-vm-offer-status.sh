@@ -71,8 +71,13 @@ if [ -n "$JOB_ID" ]; then
 	if [ "$DETAIL" = "true" ]; then
 		echo ""
 		echo "=== Job Detail ==="
-		_detail="$(pc_get_job_detail "$JOB_ID")"
-		printf '%s\n' "$_detail" | jq .
+		_job_status="$(printf '%s' "$_status" | jq -r '.jobStatus // empty')"
+		if [ "$_job_status" = "completed" ]; then
+			_detail="$(pc_get_job_detail "$JOB_ID")"
+			printf '%s\n' "$_detail" | jq .
+		else
+			echo "  (detail only available after job completes; current status: ${_job_status})"
+		fi
 	fi
 
 	exit 0
