@@ -154,7 +154,21 @@ Example: Creating FreeBSD 14.4-RELEASE offer
 8. If corrections are needed
 ----------------------------
 
-  Extract a resource for editing:
+  Option A: Submit the full exported resource-tree after editing:
+
+  ./pc-vm-offer-compare.sh -v resource-tree_freebsd-14_3_draft.json \
+    resource-tree_freebsd-14_4_draft.json
+  ./pc-vm-offer-update.sh -e freebsd-14_4 -r resource-tree_freebsd-14_4_draft.json
+
+  The script automatically:
+    - Unwraps the resource-tree envelope
+    - Filters out listing-asset (expired SAS URLs), customer-leads, submission
+    - Normalizes $schema URLs
+    - Fixes stale product references
+
+  The diff shown is normalized (no durable IDs, stable sort) for easy review.
+
+  Option B: Extract a specific resource type, edit, and submit:
 
   ./pc-vm-offer-update.sh -e freebsd-14_4 -R listing -o listing-edit.json
   vi listing-edit.json
@@ -163,7 +177,7 @@ Example: Creating FreeBSD 14.4-RELEASE offer
 
   ./pc-vm-offer-update.sh -e freebsd-14_4 -r listing-edit.json -d
 
-  Submit the changes (shows diff and asks for confirmation):
+  Submit the changes (shows normalized diff and asks for confirmation):
 
   ./pc-vm-offer-update.sh -e freebsd-14_4 -r listing-edit.json
 
