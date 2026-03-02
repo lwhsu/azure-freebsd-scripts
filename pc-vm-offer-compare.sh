@@ -1,20 +1,33 @@
 #!/bin/sh
 # pc-vm-offer-compare.sh -- Normalize and diff two resource trees
 #
-# Usage: pc-vm-offer-compare.sh FILE_A FILE_B
+# Usage: pc-vm-offer-compare.sh [-v] FILE_A FILE_B
 
 set -eu
 
 usage() {
 	cat >&2 <<'EOF'
-Usage: pc-vm-offer-compare.sh FILE_A FILE_B
+Usage: pc-vm-offer-compare.sh [-v] FILE_A FILE_B
 
 Normalizes both resource trees (removes durable IDs, volatile URLs, sorts
 by schema type) and diffs them. Useful for verifying that a cloned offer
 only differs in version-specific fields.
+
+  -v   Open in vimdiff instead of showing a unified diff
 EOF
 	exit 1
 }
+
+VIMDIFF=false
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-v) VIMDIFF=true; shift ;;
+	-h|--help) usage ;;
+	--) shift; break ;;
+	-*) echo "ERROR: Unknown option: $1" >&2; usage ;;
+	*) break ;;
+	esac
+done
 
 [ $# -eq 2 ] || usage
 [ -f "$1" ] || { echo "ERROR: File not found: $1" >&2; exit 1; }
@@ -58,23 +71,24 @@ NORMALIZE_FILTER='
 sort_by(."$schema")
 '
 
-_tmp_a="$(mktemp)"
-_tmp_b="$(mktemp)"
+_label_a="$(basename "$1")"
+_label_b="$(basename "$2")"
+
+_tmp_a="$(mktemp -t "${_label_a}.XXXXXX")"
+_tmp_b="$(mktemp -t "${_label_b}.XXXXXX")"
 trap 'rm -f "$_tmp_a" "$_tmp_b"' EXIT INT TERM
 
 jq "$NORMALIZE_FILTER" "$1" > "$_tmp_a"
 jq "$NORMALIZE_FILTER" "$2" > "$_tmp_b"
 
-# Use labels based on filenames
-_label_a="$(basename "$1")"
-_label_b="$(basename "$2")"
-
-_diff_output="$(diff --color=always -u --label "$_label_a" --label "$_label_b" "$_tmp_a" "$_tmp_b" || true)"
-
-if [ -z "$_diff_output" ]; then
-	echo "(no differences after normalization)"
+if [ "$VIMDIFF" = "true" ]; then
+	vimdiff "$_tmp_a" "$_tmp_b"
 else
-	if [ -t 1 ] && command -v less >/dev/null 2>&1; then
+	_diff_output="$(diff --color=always -u --label "$_label_a" --label "$_label_b" "$_tmp_a" "$_tmp_b" || true)"
+
+	if [ -z "$_diff_output" ]; then
+		echo "(no differences after normalization)"
+	elif [ -t 1 ] && command -v less >/dev/null 2>&1; then
 		printf '%s\n' "$_diff_output" | less -R
 	else
 		printf '%s\n' "$_diff_output"
