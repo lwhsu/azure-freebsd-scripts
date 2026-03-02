@@ -180,6 +180,9 @@ rm -f "$_tmp_current" "$_tmp_edited"
 _resources="$(printf '%s' "$_edited" | jq --arg pid "$_durable" '
 	(if type == "array" then . else [.] end) |
 	[.[] |
+		# Normalize schema URLs to schema.mp.microsoft.com
+		."$schema" |= gsub("https://product-ingestion\\.azureedge\\.net/schema/";
+		                    "https://schema.mp.microsoft.com/schema/") |
 		# Add product reference for non-product resources that lack one
 		if (."$schema" | test("schema/product/") | not) and
 		   (.product == null or (.product | type) != "string") then
