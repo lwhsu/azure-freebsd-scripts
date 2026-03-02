@@ -119,13 +119,20 @@ Example: Creating FreeBSD 14.4-RELEASE offer
     - SIG image paths/versions
     - No durable IDs in the new file (expected)
 
+  Output is colored and paged through less automatically.
+
 
 5. (Optional) Edit the generated JSON manually
 -----------------------------------------------
 
+  Directly with an editor:
+
   vi offer-create_freebsd-14_4.json
 
-  For example, to adjust the description or add extra links.
+  Or interactively with vimdiff against the source (edits saved to disk):
+
+  ./pc-vm-offer-compare.sh -v resource-tree_freebsd-14_3_draft.json \
+    offer-create_freebsd-14_4.json
 
 
 6. Create the offer in Partner Center
@@ -222,9 +229,14 @@ Review an offer from API:
 Review an offer from file:
   ./pc-vm-offer-review.sh -f resource-tree_freebsd-14_3_draft.json
 
-Compare two offers:
+Compare two offers (colored diff + pager):
   ./pc-vm-offer-compare.sh resource-tree_freebsd-14_3_draft.json \
     resource-tree_freebsd-15_0_draft.json
+
+Compare and edit interactively in vimdiff:
+  ./pc-vm-offer-compare.sh -v resource-tree_freebsd-14_3_draft.json \
+    offer-create_freebsd-14_4.json
+  (edits are saved back to the original files)
 
 Clone with RC images for testing:
   ./pc-vm-offer-clone.sh -f resource-tree_freebsd-14_3_draft.json \
