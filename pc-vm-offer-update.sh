@@ -116,27 +116,47 @@ _types="$(printf '%s' "$_edited" | jq -r '
 	echo "$schema" | sed 's|.*/schema/||; s|/.*||'
 done | sort -u)"
 
-# Extract matching current resources for diff
+# Normalization filter for diff display (mirrors pc-vm-offer-compare.sh)
+_NORM='[.[] |
+	del(.id) |
+	."$schema" |= gsub("product-ingestion\\.azureedge\\.net/schema/"; "schema.mp.microsoft.com/schema/") |
+	if (."$schema" | test("listing-asset")) then del(.url) else . end |
+	del(.resourceName) |
+	(if .product then .product = "PRODUCT_REF" else . end) |
+	(if .plan then .plan = "PLAN_REF" else . end) |
+	(if .listing then .listing = "LISTING_REF" else . end)
+] | sort_by(."$schema")'
+
+# Build a regex pattern covering all types present in the edited file
+_type_pat="$(printf '%s' "$_types" | tr '\n' '|' | sed 's/|$//')"
+
+# Extract matching current resources and normalize both sides for diff
 _tmp_current="$(mktemp)"
 _tmp_edited="$(mktemp)"
 trap 'rm -f "$_tmp_current" "$_tmp_edited"' EXIT INT TERM
 
-for _rtype in $_types; do
-	printf '%s' "$_tree" | jq --arg rt "$_rtype" '[
-		.resources[] | select(."$schema" | test("schema/" + $rt + "/"))
-	]' | jq -S '.' >> "$_tmp_current"
-done
+printf '%s' "$_tree" | jq -S --arg pat "$_type_pat" \
+	'[.resources[] | select(."$schema" | test("schema/(" + $pat + ")/"))] | '"$_NORM" \
+	> "$_tmp_current"
 
-printf '%s' "$_edited" | jq -S '
-	if type == "array" then . else [.] end
-' > "$_tmp_edited"
+printf '%s' "$_edited" | jq -S "$_NORM" > "$_tmp_edited"
 
 echo "" >&2
-echo "=== Diff (current draft vs edited) ===" >&2
-if diff -u "$_tmp_current" "$_tmp_edited"; then
+echo "=== Diff (current draft vs edited, normalized) ===" >&2
+_diff_out="$(diff --color=always -u \
+	--label "current:${EXT_ID}" --label "edited:$(basename "$RESOURCE_FILE")" \
+	"$_tmp_current" "$_tmp_edited" || true)"
+
+if [ -z "$_diff_out" ]; then
 	echo "(no differences)" >&2
 	rm -f "$_tmp_current" "$_tmp_edited"
 	exit 0
+fi
+
+if [ -t 1 ] && command -v less >/dev/null 2>&1; then
+	printf '%s\n' "$_diff_out" | less -R
+else
+	printf '%s\n' "$_diff_out"
 fi
 
 echo "" >&2
