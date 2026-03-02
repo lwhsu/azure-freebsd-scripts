@@ -74,12 +74,22 @@ pc_api_get_url() {
 # POST JSON to a full URL
 pc_api_post() {
 	pc_ensure_token
-	curl -fsS -X POST \
+	_pc_post_tmp="$(mktemp)"
+	_pc_post_http="$(curl -sS -X POST \
+		-o "$_pc_post_tmp" -w '%{http_code}' \
 		"$1" \
 		-H "Authorization: Bearer ${PC_TOKEN}" \
 		-H "Content-Type: application/json" \
 		-H "Accept: application/json" \
-		-d "$2"
+		-d "$2")"
+	if [ "$_pc_post_http" -ge 400 ]; then
+		echo "ERROR: HTTP ${_pc_post_http} from POST $1" >&2
+		cat "$_pc_post_tmp" >&2
+		rm -f "$_pc_post_tmp"
+		return 1
+	fi
+	cat "$_pc_post_tmp"
+	rm -f "$_pc_post_tmp"
 }
 
 # Resolve an offer externalId to its product durable ID (e.g., "product/<GUID>")

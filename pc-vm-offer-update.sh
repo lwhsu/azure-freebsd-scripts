@@ -97,7 +97,7 @@ _edited="$(jq '.' "$RESOURCE_FILE")"
 _edited="$(printf '%s' "$_edited" | jq '
 	if type == "object" and .resources then
 		[.resources[] | select(
-			(."$schema" | test("customer-leads|submission") | not) and
+			(."$schema" | test("customer-leads|submission|listing-asset") | not) and
 			(."$schema" | test("resource-tree") | not)
 		)]
 	elif type == "array" then .
