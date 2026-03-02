@@ -82,7 +82,17 @@ jq "$NORMALIZE_FILTER" "$1" > "$_tmp_a"
 jq "$NORMALIZE_FILTER" "$2" > "$_tmp_b"
 
 if [ "$VIMDIFF" = "true" ]; then
-	vimdiff "$_tmp_a" "$_tmp_b"
+	# Open the original files directly so edits are saved to disk.
+	# Pretty-print first if the file is valid JSON (vimdiff opens in-place).
+	_file_a="$(realpath "$1")"
+	_file_b="$(realpath "$2")"
+	if jq -e . "$_file_a" >/dev/null 2>&1; then
+		jq . "$_file_a" > "$_tmp_a" && cp "$_tmp_a" "$_file_a"
+	fi
+	if jq -e . "$_file_b" >/dev/null 2>&1; then
+		jq . "$_file_b" > "$_tmp_b" && cp "$_tmp_b" "$_file_b"
+	fi
+	vimdiff "$_file_a" "$_file_b"
 else
 	_diff_output="$(diff --color=always -u --label "$_label_a" --label "$_label_b" "$_tmp_a" "$_tmp_b" || true)"
 
