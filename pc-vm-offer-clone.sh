@@ -73,7 +73,7 @@ OUTPUT_FILE=""
 
 while [ $# -gt 0 ]; do
 	case "$1" in
-	-s) SRC_EXTID="$2"; shift 2 ;;
+	-s) SRC_EXTID="$(pc_resolve_ext_id "$2")"; shift 2 ;;
 	-f) SRC_FILE="$2"; shift 2 ;;
 	-t) TGT_VERSION="$2"; shift 2 ;;
 	-T) SIG_TAG="$2"; shift 2 ;;

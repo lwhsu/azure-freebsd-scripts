@@ -27,7 +27,7 @@ SUBMISSION_ID=""
 
 while [ $# -gt 0 ]; do
 	case "$1" in
-	-e) EXT_ID="$2"; shift 2 ;;
+	-e) EXT_ID="$(pc_resolve_ext_id "$2")"; shift 2 ;;
 	-t) TARGET="$2"; shift 2 ;;
 	-s) SUBMISSION_ID="$2"; shift 2 ;;
 	-h|--help) usage ;;

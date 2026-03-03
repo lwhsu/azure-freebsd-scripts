@@ -42,7 +42,7 @@ DIFF_ONLY=false
 
 while [ $# -gt 0 ]; do
 	case "$1" in
-	-e) EXT_ID="$2"; shift 2 ;;
+	-e) EXT_ID="$(pc_resolve_ext_id "$2")"; shift 2 ;;
 	-R) RESOURCE_TYPE="$2"; shift 2 ;;
 	-r) RESOURCE_FILE="$2"; shift 2 ;;
 	-o) OUTPUT_FILE="$2"; shift 2 ;;

@@ -14,6 +14,19 @@ PC_TOKEN=""
 
 pc_die() { echo "ERROR: $*" >&2; exit 1; }
 
+# Resolve a short version string (e.g. "14.4") to a full externalId ("freebsd-14_4").
+# Passes through strings that already look like full externalIds.
+pc_resolve_ext_id() {
+	case "$1" in
+	[0-9]*.[0-9]*)
+		printf 'freebsd-%s' "$(printf '%s' "$1" | tr '.' '_')"
+		;;
+	*)
+		printf '%s' "$1"
+		;;
+	esac
+}
+
 pc_need_bin() {
 	command -v "$1" >/dev/null 2>&1 || pc_die "Missing required command: $1"
 }

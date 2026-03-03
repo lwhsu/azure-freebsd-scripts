@@ -34,7 +34,7 @@ DETAIL=false
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-j) JOB_ID="$2"; shift 2 ;;
-	-e) EXT_ID="$2"; shift 2 ;;
+	-e) EXT_ID="$(pc_resolve_ext_id "$2")"; shift 2 ;;
 	-w) WAIT=true; shift ;;
 	-d) DETAIL=true; shift ;;
 	-h|--help) usage ;;
