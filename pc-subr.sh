@@ -5,12 +5,14 @@
 # Requires variables: TENANT_ID, CLIENT_ID, CLIENT_SECRET
 
 PC_GRAPH_BASE="https://graph.microsoft.com/rp/product-ingestion"
+PC_PARTNER_BASE="https://api.partner.microsoft.com/v1.0/ingestion"
 PC_PRODUCT_VERSION="${PC_PRODUCT_VERSION:-2022-03-01-preview3}"
 PC_TREE_VERSION="${PC_TREE_VERSION:-2022-03-01-preview5}"
 PC_CONFIGURE_VERSION="${PC_CONFIGURE_VERSION:-2022-03-01-preview2}"
 PC_MAX_PAGE_SIZE="${PC_MAX_PAGE_SIZE:-200}"
 
 PC_TOKEN=""
+PC_PARTNER_TOKEN=""
 
 pc_die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -57,6 +59,49 @@ pc_ensure_token() {
 		PC_TOKEN="$(pc_get_token)"
 		[ -n "$PC_TOKEN" ] || pc_die "Failed to obtain access token"
 	fi
+}
+
+# Obtain an OAuth2 access token for api.partner.microsoft.com
+pc_get_partner_token() {
+	curl -fsS -X POST \
+		"https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		--data-urlencode "grant_type=client_credentials" \
+		--data-urlencode "client_id=${CLIENT_ID}" \
+		--data-urlencode "client_secret=${CLIENT_SECRET}" \
+		--data-urlencode "scope=https://api.partner.microsoft.com/.default" \
+	| jq -r '.access_token // empty'
+}
+
+pc_ensure_partner_token() {
+	if [ -z "$PC_PARTNER_TOKEN" ]; then
+		PC_PARTNER_TOKEN="$(pc_get_partner_token)"
+		[ -n "$PC_PARTNER_TOKEN" ] || pc_die "Failed to obtain partner API access token"
+	fi
+}
+
+# GET with path relative to PC_PARTNER_BASE
+pc_api_partner_get() {
+	pc_ensure_partner_token
+	_pc_pg_tmp="$(mktemp -t pc_pg.XXXXXX)"
+	_pc_pg_http="$(curl -sS --get \
+		-o "$_pc_pg_tmp" -w '%{http_code}' \
+		"${PC_PARTNER_BASE}${1}" \
+		-H "Authorization: Bearer ${PC_PARTNER_TOKEN}" \
+		-H "Accept: application/json")"
+	if [ "$_pc_pg_http" -ge 400 ]; then
+		echo "ERROR: HTTP ${_pc_pg_http} from GET ${PC_PARTNER_BASE}${1}" >&2
+		cat "$_pc_pg_tmp" >&2
+		rm -f "$_pc_pg_tmp"
+		return 1
+	fi
+	cat "$_pc_pg_tmp"
+	rm -f "$_pc_pg_tmp"
+}
+
+# List active submissions for a product GUID via the partner API
+pc_list_submissions() {
+	pc_api_partner_get "/products/${1}/submissions"
 }
 
 # GET with path relative to GRAPH_BASE, plus optional key=value query params

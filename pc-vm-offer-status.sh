@@ -94,38 +94,20 @@ fi
 # --- Offer submissions mode ---
 echo "Fetching submissions for: ${EXT_ID}"
 _durable="$(pc_get_product_durable_id "$EXT_ID")"
-_tree="$(pc_get_resource_tree "$_durable" "draft")"
+_guid="${_durable#product/}"
 
 echo ""
-echo "=== Submissions ==="
-printf '%s' "$_tree" | jq -r '
-	[.resources[] | select(."$schema" | test("schema/submission/"))] |
+echo "=== Publishing Status ==="
+_subs="$(pc_list_submissions "$_guid")"
+printf '%s' "$_subs" | jq -r '
+	(.value // []) |
 	if length == 0 then
-		"  (no submissions found)"
+		"  (no active submissions)"
 	else
-		to_entries[] | .value |
-		"  ID:     \(.id // "N/A")",
-		"  Target: \((.target // {}).targetType // "N/A")",
-		"  State:  \(.lifecycleState // "N/A")",
+		.[] |
+		"  \(.friendlyName // "Submission") (ID: \(.id // "N/A"))",
+		"  Target:  \(([.targets[]? | .value] | join(", ")) // "N/A")",
+		"  State:   \(.state // "N/A") / \(.substate // "N/A")",
 		""
 	end
 '
-
-# Also check preview and live targets
-for _target in preview live; do
-	_tree_t="$(pc_get_resource_tree "$_durable" "$_target" 2>/dev/null || true)"
-	if [ -n "$_tree_t" ]; then
-		_sub="$(printf '%s' "$_tree_t" | jq -r '
-			[.resources[] | select(."$schema" | test("schema/submission/"))][0] // null
-		')"
-		if [ "$_sub" != "null" ]; then
-			echo "=== ${_target} ==="
-			printf '%s' "$_sub" | jq -r '
-				"  ID:     \(.id // "N/A")",
-				"  Target: \((.target // {}).targetType // "N/A")",
-				"  State:  \(.lifecycleState // "N/A")",
-				""
-			'
-		fi
-	fi
-done
