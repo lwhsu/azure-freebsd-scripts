@@ -258,3 +258,46 @@ Clone with RC images for testing:
 
 Interactive export (pick from list):
   ./pc-vm-offer-export.sh
+
+Set recommended VM sizes:
+  ./pc-vm-offer-update.sh -e freebsd-14_4 -r tech-config-recommended-vm-sizes_freebsd-14_4.json
+
+
+Recommended VM sizes format
+============================
+
+Partner Center uses a different format from the standard Azure VM size names
+returned by `az vm list-sizes`.
+
+  Azure API name       Partner Center value
+  ----------------     --------------------
+  Standard_A1_v2       a1-standard-v2
+  Standard_D2s_v3      d2s-standard-v3
+  Standard_D2s_v5      d2s-standard-v5
+  Standard_D2ps_v5     d2ps-standard-v5
+
+Conversion rule: strip "Standard_", move the tier word to the middle,
+lowercase everything, underscores -> hyphens.
+
+  Standard_{X}_{vN}  ->  {x}-standard-{vN}
+
+Shell one-liner:
+  echo "Standard_D2s_v5" | \
+    sed 's/Standard_\(.*\)_\(v[0-9]*\)/\1-standard-\2/' | \
+    tr '[:upper:]' '[:lower:]'
+  # -> d2s-standard-v5
+
+Note: v6 sizes (e.g. Standard_D2s_v6) are NOT accepted by Partner Center
+as of early 2026 even though they are GA in Azure Compute. Use v5.
+
+Current sizes used for FreeBSD 14.4 (both UFS and ZFS plans):
+  d2s-standard-v5    (Standard_D2s_v5,  2 vCPU,  8 GiB, Intel x64)
+  d4s-standard-v5    (Standard_D4s_v5,  4 vCPU, 16 GiB, Intel x64)
+  d8s-standard-v5    (Standard_D8s_v5,  8 vCPU, 32 GiB, Intel x64)
+  d2as-standard-v5   (Standard_D2as_v5, 2 vCPU,  8 GiB, AMD x64)
+  d2ps-standard-v5   (Standard_D2ps_v5, 2 vCPU,  8 GiB, Ampere arm64)
+  d4ps-standard-v5   (Standard_D4ps_v5, 4 vCPU, 16 GiB, Ampere arm64)
+
+Template file: tech-config-recommended-vm-sizes_freebsd-14_4.json
+(contains full virtual-machine-plan-technical-configuration resources
+ for both plans with recommendedVmSizes populated)
