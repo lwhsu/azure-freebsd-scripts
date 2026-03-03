@@ -197,13 +197,31 @@ Example: Creating FreeBSD 14.4-RELEASE offer
   ./pc-vm-offer-update.sh -e freebsd-14_4 -r tech-config.json
 
 
-10. Submit to preview
+10. Set submission notification audience (web UI, once per offer)
+-----------------------------------------------------------------
+
+  The Product Ingestion API does NOT expose an endpoint for managing
+  notification recipients. This must be set manually in the web UI, but
+  only once -- it persists across all future submissions of the offer.
+
+  URL: https://partner.microsoft.com/en-us/dashboard/commercial-marketplace/offers/<PRODUCT_GUID>/notifications
+
+  For freebsd-14_4:
+  https://partner.microsoft.com/en-us/dashboard/commercial-marketplace/offers/e5e5694c-b72c-4e17-bf30-8f63e5dad5d0/notifications
+
+  Add: your-email@example.org
+
+  Note: The account owner is always notified and cannot be removed.
+  Only users with the "developer" or "manager" role can be added.
+
+
+11. Submit to preview
 ---------------------
 
   ./pc-vm-offer-submit.sh -e freebsd-14_4 -t preview
 
 
-11. Poll for certification (~24-48h)
+13. Poll for certification (~24-48h)
 -------------------------------------
 
   ./pc-vm-offer-status.sh -j <JOB_ID> -w
@@ -218,7 +236,7 @@ Example: Creating FreeBSD 14.4-RELEASE offer
   ./pc-vm-offer-status.sh -e freebsd-14_4
 
 
-12. Go live
+14. Go live
 -----------
 
   ./pc-vm-offer-submit.sh -e freebsd-14_4 -t live -s <PREVIEW_SUBMISSION_ID>

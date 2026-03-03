@@ -52,6 +52,7 @@ pc_check_prereqs
 
 echo "Resolving offer: ${EXT_ID}"
 _durable="$(pc_get_product_durable_id "$EXT_ID")"
+_guid="${_durable#product/}"
 echo "Product durable ID: ${_durable}"
 echo ""
 
@@ -99,3 +100,7 @@ echo "Job ID: ${_job_id}"
 echo ""
 echo "Submission started. Use pc-vm-offer-status.sh to check progress:"
 echo "  ./pc-vm-offer-status.sh -j ${_job_id} -w"
+echo ""
+echo "Reminder: Ensure notification recipients are configured for this offer"
+echo "(product-level setting, only needed once -- persists across submissions):"
+echo "  https://partner.microsoft.com/en-us/dashboard/commercial-marketplace/offers/${_guid}/notifications"
