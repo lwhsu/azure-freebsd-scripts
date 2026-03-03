@@ -70,13 +70,21 @@ if [ -n "$JOB_ID" ]; then
 
 	if [ "$DETAIL" = "true" ]; then
 		echo ""
-		echo "=== Job Detail ==="
 		_job_status="$(printf '%s' "$_status" | jq -r '.jobStatus // empty')"
-		if [ "$_job_status" = "completed" ]; then
+		_job_result="$(printf '%s' "$_status" | jq -r '.jobResult // empty')"
+		if [ "$_job_status" != "completed" ]; then
+			echo "=== Job Detail ==="
+			echo "  (detail only available after job completes; current status: ${_job_status})"
+		elif [ "$_job_result" = "failed" ]; then
+			echo "=== Job Errors ==="
+			printf '%s\n' "$_status" | jq -r '
+				.errors[]? |
+				"  [\(.code)] \(.resourceId // "unknown"): \(.message)"
+			'
+		else
+			echo "=== Job Detail ==="
 			_detail="$(pc_get_job_detail "$JOB_ID")"
 			printf '%s\n' "$_detail" | jq .
-		else
-			echo "  (detail only available after job completes; current status: ${_job_status})"
 		fi
 	fi
 

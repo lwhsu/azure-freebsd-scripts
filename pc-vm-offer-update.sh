@@ -218,7 +218,11 @@ if pc_poll_job "$_job_id" 30 60; then
 else
 	echo ""
 	echo "Update failed."
-	_detail="$(pc_get_job_detail "$_job_id")"
-	printf '%s\n' "$_detail" | jq .
+	_job_status="$(pc_api_get "/configure/${_job_id}/status" \
+		"\$version=${PC_CONFIGURE_VERSION}")"
+	printf '%s\n' "$_job_status" | jq -r '
+		.errors[]? |
+		"  [\(.code)] \(.resourceId // "unknown"): \(.message)"
+	'
 	exit 1
 fi
