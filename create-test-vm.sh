@@ -191,7 +191,7 @@ show_vm_ips()
 
 		[ -n "${public_ip}" ] || public_ip="-"
 		[ -n "${private_ip}" ] || private_ip="-"
-		echo "  ${vm}  public=${public_ip} private=${private_ip}"
+		echo "  ${vm}  public: ${public_ip} private: ${private_ip}"
 	done
 }
 
