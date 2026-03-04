@@ -7,9 +7,10 @@ set -eu
 
 usage()
 {
-	echo "Usage: $0 [-n] VERSION" >&2
+	echo "Usage: $0 [-n] [-w] VERSION" >&2
 	echo "Example: $0 14.4" >&2
 	echo "         $0 -n 14.4" >&2
+	echo "         $0 -w 14.4" >&2
 	exit 1
 }
 
@@ -115,11 +116,92 @@ run_or_print_cmd()
 	fi
 }
 
-DRY_RUN=false
+poll_vm_provisioning()
+{
+	interval="${VM_POLL_INTERVAL:-20}"
+	max_attempts="${VM_POLL_MAX_ATTEMPTS:-180}"
+	attempt=0
+	pending="$(printf '%s\n' "${CREATED_VM_NAMES}" | sed '/^$/d')"
+	failed_vms=""
 
-while getopts "nh" opt; do
+	while [ -n "${pending}" ] && [ "${attempt}" -lt "${max_attempts}" ]; do
+		attempt=$((attempt + 1))
+		echo "Provisioning status check ${attempt}/${max_attempts}..."
+		next_pending=""
+
+		for vm in ${pending}; do
+			state="$(az vm show \
+				--resource-group "${RESOURCE_GROUP_TEST}" \
+				--name "${vm}" \
+				--query provisioningState \
+				-o tsv 2>/dev/null || echo "Unknown")"
+
+			case "${state}" in
+			Succeeded)
+				echo "  ${vm}: ${state}"
+				;;
+			Failed|Canceled)
+				echo "  ${vm}: ${state}"
+				failed_vms="${failed_vms}
+${vm}"
+				;;
+			*)
+				echo "  ${vm}: ${state}"
+				next_pending="${next_pending}
+${vm}"
+				;;
+			esac
+		done
+
+		pending="$(printf '%s\n' "${next_pending}" | sed '/^$/d')"
+		if [ -n "${pending}" ] && [ "${attempt}" -lt "${max_attempts}" ]; then
+			sleep "${interval}"
+		fi
+	done
+
+	if [ -n "${pending}" ]; then
+		echo "Timed out waiting for VM provisioning completion:" >&2
+		printf '%s\n' "${pending}" | sed '/^$/d' | sed 's/^/  /' >&2
+		return 2
+	fi
+
+	if [ -n "$(printf '%s\n' "${failed_vms}" | sed '/^$/d')" ]; then
+		echo "Some VMs failed provisioning:" >&2
+		printf '%s\n' "${failed_vms}" | sed '/^$/d' | sed 's/^/  /' >&2
+		return 1
+	fi
+
+	return 0
+}
+
+show_vm_ips()
+{
+	echo "VM IP addresses:"
+	for vm in $(printf '%s\n' "${CREATED_VM_NAMES}" | sed '/^$/d'); do
+		public_ip="$(az vm list-ip-addresses \
+			--resource-group "${RESOURCE_GROUP_TEST}" \
+			--name "${vm}" \
+			--query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" \
+			-o tsv 2>/dev/null || true)"
+		private_ip="$(az vm list-ip-addresses \
+			--resource-group "${RESOURCE_GROUP_TEST}" \
+			--name "${vm}" \
+			--query "[0].virtualMachine.network.privateIpAddresses[0]" \
+			-o tsv 2>/dev/null || true)"
+
+		[ -n "${public_ip}" ] || public_ip="-"
+		[ -n "${private_ip}" ] || private_ip="-"
+		echo "  ${vm}  public=${public_ip} private=${private_ip}"
+	done
+}
+
+DRY_RUN=false
+WAIT=false
+
+while getopts "nwh" opt; do
 	case "$opt" in
 	n) DRY_RUN=true ;;
+	w) WAIT=true ;;
 	h) usage ;;
 	*) usage ;;
 	esac
@@ -177,10 +259,14 @@ fi
 
 if [ "${DRY_RUN}" = "true" ]; then
 	echo "Selected image definition version: ${SELECTED_VERSION}" >&2
+	if [ "${WAIT}" = "true" ]; then
+		echo "Dry run mode: -w is ignored." >&2
+	fi
 fi
 
 count=0
 created=""
+CREATED_VM_NAMES=""
 
 for IMAGE_DEFINITION in ${IMAGE_DEFINITIONS}; do
 	LATEST_VERSION="$(az sig image-version list \
@@ -229,6 +315,8 @@ for IMAGE_DEFINITION in ${IMAGE_DEFINITIONS}; do
 
 	created="${created}
 ${VM_NAME} ${IMAGE_DEFINITION}:${LATEST_VERSION} ${SIZE}"
+	CREATED_VM_NAMES="${CREATED_VM_NAMES}
+${VM_NAME}"
 done
 
 if [ "${count}" -eq 0 ]; then
@@ -239,4 +327,16 @@ fi
 if [ "${DRY_RUN}" = "false" ]; then
 	echo "Created ${count} VM(s):"
 	printf '%s\n' "${created}" | sed '/^$/d'
+
+	if [ "${WAIT}" = "true" ]; then
+		echo ""
+		echo "Waiting for all VM provisioning to complete..."
+		poll_rc=0
+		poll_vm_provisioning || poll_rc=$?
+		echo ""
+		show_vm_ips
+		if [ "${poll_rc}" -ne 0 ]; then
+			exit "${poll_rc}"
+		fi
+	fi
 fi
