@@ -1,63 +1,66 @@
 # Blob Upload Monitor (FreeBSD Image Set)
 
-This Azure Function app watches `BlobCreated` events and groups uploads by version.
+This Azure Function app watches `BlobCreated` events and tracks upload status by
+FreeBSD image version.
 
-For files matching:
-- container: `disks` (configurable)
-- prefix: `FreeBSD-` (configurable)
-- suffix: `.vhd` (configurable)
+## Active Functions
 
-it will:
-1. mark arrived variants in table storage,
-2. notify when all expected variants are uploaded,
-3. notify timeout if not completed within 1 hour (configurable).
+- `UploadEvent` (`httpTrigger`): receives Event Grid webhook events, updates
+  batch state, sends notifications.
+- `TimeoutCheck` (`timerTrigger`): periodically checks incomplete batches and
+  sends timeout notifications once timeout is reached.
 
-## Current notification channels
+## Event Matching
 
-- `ntfy` (enabled by default)
-- `matrix` webhook (reserved; optional)
-- `email` webhook (reserved; optional)
+- Container: `disks` (configurable)
+- Prefix: `FreeBSD-` (configurable)
+- Suffix: `.vhd` (configurable)
 
-## Expected variants
-
-Default:
+Expected variants (default):
 - `amd64-ufs`
 - `amd64-zfs`
 - `arm64-aarch64-ufs`
 - `arm64-aarch64-zfs`
 
-You can change this without code changes using app setting `EXPECTED_VARIANTS`.
+## Notifications
+
+For each version batch:
+1. `started`: sent once when the first expected file arrives.
+2. `complete`: sent once when all expected variants are uploaded.
+3. `timeout`: sent once when timeout window is reached and batch is still
+   incomplete.
+
+Channels:
+- `ntfy` (enabled by default)
+- `matrix` webhook (optional)
+- `email` webhook (optional)
+
+## Main Settings
+
+- `TABLE_NAME` (default `ImageUploadBatches`)
+- `TIMEOUT_SECONDS` (default `3600`)
+- `TIMEOUT_SWEEP_CRON` (default `0 */5 * * * *`)
+- `CONTAINER_NAME`
+- `FILENAME_PREFIX`
+- `FILENAME_SUFFIX`
+- `EXPECTED_VARIANTS`
+- `NTFY_SERVER`, `NTFY_TOPIC`, `NTFY_TOKEN`
+- `MATRIX_WEBHOOK_URL`
+- `EMAIL_WEBHOOK_URL`
 
 ## Deploy
-
-From repo root:
 
 ```sh
 ./setup-blob-upload-monitor.sh
 ```
 
-The deployment script uses values from `config.sh` and these optional env vars:
-
-- `LOCATION` (default: `eastus`)
-- `MONITOR_FUNCTION_APP` (default: `freebsd-img-upload-monitor`)
-- `MONITOR_STORAGE_ACCOUNT` (default: generated)
-- `EVENT_SUBSCRIPTION_NAME` (default: `freebsd-image-upload-created`)
-- `TABLE_NAME` (default: `ImageUploadBatches`)
-- `CONTAINER_NAME` (default from `STORAGE_ACCOUNT_CONTAINER`)
-- `FILENAME_PREFIX` (default: `FreeBSD-`)
-- `FILENAME_SUFFIX` (default: `.vhd`)
-- `EXPECTED_VARIANTS` (comma-separated)
-- `TIMEOUT_SECONDS` (default: `3600`)
-- `NTFY_SERVER` (default: `https://ntfy.sh`)
-- `NTFY_TOPIC` (default: `freebsd-azure-image-upload`)
-- `NTFY_TOKEN` (optional)
-- `MATRIX_WEBHOOK_URL` (optional)
-- `EMAIL_WEBHOOK_URL` (optional)
-
 ## Test
 
-Upload one matching blob and verify no "complete" notification yet.
+1. Upload first file of a version:
+- expect `started` notification.
 
-Upload all expected variants for one version and verify one "complete" notification.
+2. Upload all expected variants:
+- expect `complete` notification.
 
-For timeout testing, temporarily set `TIMEOUT_SECONDS=120` and upload only one file.
+3. Upload only one variant and wait past timeout:
+- expect `timeout` notification.

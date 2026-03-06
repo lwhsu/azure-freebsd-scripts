@@ -2,8 +2,43 @@
 
 set -eu
 
+OVERRIDE_VARS="
+SUBSCRIPTION
+RESOURCE_GROUP
+STORAGE_ACCOUNT_NAME
+STORAGE_ACCOUNT_CONTAINER
+LOCATION
+MONITOR_FUNCTION_APP
+MONITOR_STORAGE_ACCOUNT
+EVENT_SUBSCRIPTION_NAME
+TABLE_NAME
+CONTAINER_NAME
+FILENAME_PREFIX
+FILENAME_SUFFIX
+EXPECTED_VARIANTS
+TIMEOUT_SECONDS
+TIMEOUT_SWEEP_CRON
+NTFY_SERVER
+NTFY_TOPIC
+NTFY_TOKEN
+MATRIX_WEBHOOK_URL
+EMAIL_WEBHOOK_URL
+"
+
+for v in ${OVERRIDE_VARS}; do
+	eval "_SET_${v}=\${${v}+x}"
+	eval "_OVR_${v}=\${${v}-}"
+done
+
 . ./config.sh
 . ./subr.sh
+
+for v in ${OVERRIDE_VARS}; do
+	eval "_set=\${_SET_${v}}"
+	if [ "${_set}" = "x" ]; then
+		eval "${v}=\${_OVR_${v}}"
+	fi
+done
 
 require SUBSCRIPTION
 require RESOURCE_GROUP
@@ -22,6 +57,7 @@ FILENAME_PREFIX="${FILENAME_PREFIX:-FreeBSD-}"
 FILENAME_SUFFIX="${FILENAME_SUFFIX:-.vhd}"
 EXPECTED_VARIANTS="${EXPECTED_VARIANTS:-amd64-ufs,amd64-zfs,arm64-aarch64-ufs,arm64-aarch64-zfs}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-3600}"
+TIMEOUT_SWEEP_CRON="${TIMEOUT_SWEEP_CRON:-0 */5 * * * *}"
 
 NTFY_SERVER="${NTFY_SERVER:-https://ntfy.sh}"
 NTFY_TOPIC="${NTFY_TOPIC:-freebsd-azure-image-upload}"
@@ -45,7 +81,8 @@ az storage account create \
 	--resource-group "${RESOURCE_GROUP}" \
 	--location "${LOCATION}" \
 	--sku Standard_LRS \
-	--kind StorageV2
+	--kind StorageV2 \
+	--min-tls-version TLS1_2
 
 MONITOR_STORAGE_KEY="$(az storage account keys list \
 	--resource-group "${RESOURCE_GROUP}" \
@@ -79,6 +116,8 @@ az functionapp config appsettings set \
 	--name "${MONITOR_FUNCTION_APP}" \
 	--resource-group "${RESOURCE_GROUP}" \
 	--settings \
+	SCM_DO_BUILD_DURING_DEPLOYMENT=true \
+	ENABLE_ORYX_BUILD=true \
 	STATE_STORAGE_CONNECTION_STRING="${MONITOR_STORAGE_CONN}" \
 	TABLE_NAME="${TABLE_NAME}" \
 	CONTAINER_NAME="${CONTAINER_NAME}" \
@@ -86,6 +125,7 @@ az functionapp config appsettings set \
 	FILENAME_SUFFIX="${FILENAME_SUFFIX}" \
 	EXPECTED_VARIANTS="${EXPECTED_VARIANTS}" \
 	TIMEOUT_SECONDS="${TIMEOUT_SECONDS}" \
+	TIMEOUT_SWEEP_CRON="${TIMEOUT_SWEEP_CRON}" \
 	NTFY_SERVER="${NTFY_SERVER}" \
 	NTFY_TOPIC="${NTFY_TOPIC}" \
 	NTFY_TOKEN="${NTFY_TOKEN}" \
@@ -99,14 +139,36 @@ rm -f "${FUNC_ZIP}"
 	zip -q -r "${FUNC_ZIP}" .
 )
 
-echo "Deploy function code"
+echo "Deploy function code (remote build)"
 az functionapp deployment source config-zip \
 	--name "${MONITOR_FUNCTION_APP}" \
 	--resource-group "${RESOURCE_GROUP}" \
-	--src "${FUNC_ZIP}"
+	--src "${FUNC_ZIP}" \
+	--build-remote true \
+	--timeout 1200
+
+az rest --method post \
+	--url "https://management.azure.com/subscriptions/${SUBSCRIPTION}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Web/sites/${MONITOR_FUNCTION_APP}/syncfunctiontriggers?api-version=2022-03-01" \
+	-o none
+
+FUNCTIONS="$(az functionapp function list --resource-group "${RESOURCE_GROUP}" --name "${MONITOR_FUNCTION_APP}" --query '[].name' -o tsv)"
+printf '%s\n' "${FUNCTIONS}" | grep -q '/UploadEvent$' || {
+	echo "UploadEvent function not indexed after deployment." >&2
+	exit 1
+}
+printf '%s\n' "${FUNCTIONS}" | grep -q '/TimeoutCheck$' || {
+	echo "TimeoutCheck function not indexed after deployment." >&2
+	exit 1
+}
+
+EVENT_FUNCTION_KEY="$(az functionapp function keys list \
+	--resource-group "${RESOURCE_GROUP}" \
+	--name "${MONITOR_FUNCTION_APP}" \
+	--function-name UploadEvent \
+	--query default -o tsv)"
 
 SOURCE_ID="/subscriptions/${SUBSCRIPTION}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Storage/storageAccounts/${STORAGE_ACCOUNT_NAME}"
-ENDPOINT_ID="/subscriptions/${SUBSCRIPTION}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Web/sites/${MONITOR_FUNCTION_APP}/functions/UploadEvent"
+ENDPOINT_URL="https://${MONITOR_FUNCTION_APP}.azurewebsites.net/api/uploadevent?code=${EVENT_FUNCTION_KEY}"
 
 echo "Create/replace event subscription: ${EVENT_SUBSCRIPTION_NAME}"
 if az eventgrid event-subscription show --name "${EVENT_SUBSCRIPTION_NAME}" --source-resource-id "${SOURCE_ID}" >/dev/null 2>&1; then
@@ -116,8 +178,7 @@ fi
 az eventgrid event-subscription create \
 	--name "${EVENT_SUBSCRIPTION_NAME}" \
 	--source-resource-id "${SOURCE_ID}" \
-	--endpoint-type azurefunction \
-	--endpoint "${ENDPOINT_ID}" \
+	--endpoint "${ENDPOINT_URL}" \
 	--included-event-types Microsoft.Storage.BlobCreated \
 	--subject-begins-with "/blobServices/default/containers/${CONTAINER_NAME}/blobs/${FILENAME_PREFIX}" \
 	--subject-ends-with "${FILENAME_SUFFIX}"
@@ -125,5 +186,6 @@ az eventgrid event-subscription create \
 echo
 echo "Deployment finished."
 echo "Function app: ${MONITOR_FUNCTION_APP}"
+echo "Source storage account: ${STORAGE_ACCOUNT_NAME}"
 echo "Event subscription: ${EVENT_SUBSCRIPTION_NAME}"
 echo "ntfy topic: ${NTFY_SERVER}/${NTFY_TOPIC}"

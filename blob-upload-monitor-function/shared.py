@@ -6,7 +6,10 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 from urllib import request
 
-from azure.data.tables import TableServiceClient
+from pkgutil import extend_path
+import azure
+
+azure.__path__ = extend_path(azure.__path__, azure.__name__)
 
 PARTITION_KEY = "freebsd-image-upload"
 
@@ -47,10 +50,16 @@ def get_storage_connection_string() -> str:
 
 
 def get_table_client():
+    from azure.core.exceptions import ResourceExistsError
+    from azure.data.tables import TableServiceClient
+
     service = TableServiceClient.from_connection_string(get_storage_connection_string())
     table_name = get_table_name()
     table = service.get_table_client(table_name=table_name)
-    table.create_table()
+    try:
+        table.create_table()
+    except ResourceExistsError:
+        pass
     return table
 
 
@@ -89,6 +98,7 @@ def load_batch(table, version: str, expected_variants: List[str]) -> Dict:
             "variantsJson": "[]",
             "expectedVariantsJson": json.dumps(expected_variants),
             "complete": False,
+            "startedNotified": False,
             "completionNotified": False,
             "timeoutNotified": False,
         }
@@ -96,7 +106,9 @@ def load_batch(table, version: str, expected_variants: List[str]) -> Dict:
 
 
 def save_batch(table, entity: Dict) -> None:
-    table.upsert_entity(mode="Merge", entity=entity)
+    from azure.data.tables import UpdateMode
+
+    table.upsert_entity(mode=UpdateMode.MERGE, entity=entity)
 
 
 def notify_ntfy(subject: str, message: str) -> None:
@@ -142,11 +154,22 @@ def notify_all(subject: str, message: str) -> None:
     notify_webhook("EMAIL_WEBHOOK_URL", subject, message)
 
 
+def build_started_message(version: str, variant: str, blob_url: str) -> Tuple[str, str]:
+    subject = f"FreeBSD image upload started: {version}"
+    lines = [
+        f"Version: {version}",
+        "Status: first expected blob uploaded",
+        f"First variant: {variant}",
+        f"Blob URL: {blob_url}",
+    ]
+    return subject, "\n".join(lines)
+
+
 def build_completed_message(version: str, variants: List[str], blob_url: str) -> Tuple[str, str]:
     subject = f"FreeBSD image upload complete: {version}"
     lines = [
         f"Version: {version}",
-        "Status: 4/4 uploads completed",
+        "Status: all expected uploads completed",
         "Variants:",
     ]
     lines.extend([f"- {v}" for v in sorted(variants)])

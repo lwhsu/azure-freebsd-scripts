@@ -1,7 +1,4 @@
 import json
-import logging
-
-import azure.functions as func
 
 from shared import (
     PARTITION_KEY,
@@ -17,10 +14,7 @@ from shared import (
 )
 
 
-def main(timer: func.TimerRequest):
-    if timer.past_due:
-        logging.info("Timer is past due")
-
+def main(timer):
     table = get_table_client()
     expected_variants = get_expected_variants()
     timeout_seconds = get_timeout_seconds()
