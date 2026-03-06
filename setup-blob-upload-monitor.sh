@@ -55,7 +55,6 @@ MONITOR_STORAGE_KEY="$(az storage account keys list \
 MONITOR_STORAGE_CONN="$(az storage account show-connection-string \
 	--resource-group "${RESOURCE_GROUP}" \
 	--name "${MONITOR_STORAGE_ACCOUNT}" \
-	--key "${MONITOR_STORAGE_KEY}" \
 	--query connectionString -o tsv)"
 
 echo "Create state table: ${TABLE_NAME}"
@@ -70,6 +69,7 @@ az functionapp create \
 	--resource-group "${RESOURCE_GROUP}" \
 	--consumption-plan-location "${LOCATION}" \
 	--storage-account "${MONITOR_STORAGE_ACCOUNT}" \
+	--os-type Linux \
 	--functions-version 4 \
 	--runtime python \
 	--runtime-version 3.11
