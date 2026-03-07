@@ -31,7 +31,9 @@ gen1)
 	;;
 gen2)
 	GENERATION=2
-	FEATURES="IsAcceleratedNetworkSupported=true DiskControllerTypes=SCSI,NVMe"
+	# Azure now defaults new Gen2 image definitions to
+	# SecurityType=TrustedLaunchSupported unless overridden explicitly.
+	FEATURES="IsAcceleratedNetworkSupported=true DiskControllerTypes=SCSI,NVMe SecurityType=Standard"
 	;;
 esac
 
@@ -61,6 +63,7 @@ az sig image-definition create \
 #  DiskControllerTypes=SCSI,NVMe
 #  IsHibernateSupported=true
 #  IsAcceleratedNetworkSupported=true
+#  SecurityType=Standard
 #  SecurityType=TrustedLaunch
 #  SecurityType=ConfidentialVmSupported
 #  SecurityType=ConfidentialVM
