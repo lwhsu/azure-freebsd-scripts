@@ -16,7 +16,9 @@ Usage: pc-vm-offer-submit.sh -e EXTERNAL_ID -t preview|live [-s SUBMISSION_ID]
 
   -e EXTID          Offer externalId (e.g., freebsd-14_4)
   -t TARGET         Target: "preview" or "live"
-  -s SUBMISSION_ID  Required for "live": the preview submission durable ID
+  -s SUBMISSION_ID  Required for "live": preview submission ID
+                   Accepts either the numeric preview submission ID or the
+                   full durable ID: submission/<product-guid>/<submission-id>
 EOF
 	exit 1
 }
@@ -64,7 +66,10 @@ if [ "$TARGET" = "preview" ]; then
 		"target": {"targetType": "preview"}
 	}')"
 else
-	_submission="$(jq -n --arg pid "$_durable" --arg sid "$SUBMISSION_ID" '{
+	_submission_durable_id="$(pc_resolve_submission_durable_id "$_durable" "$SUBMISSION_ID")"
+	echo "Submission durable ID: ${_submission_durable_id}"
+	echo ""
+	_submission="$(jq -n --arg pid "$_durable" --arg sid "$_submission_durable_id" '{
 		"$schema": "https://schema.mp.microsoft.com/schema/submission/2022-03-01-preview2",
 		"id": $sid,
 		"product": $pid,

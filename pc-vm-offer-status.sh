@@ -99,13 +99,14 @@ _guid="${_durable#product/}"
 echo ""
 echo "=== Publishing Status ==="
 _subs="$(pc_list_submissions "$_guid")"
-printf '%s' "$_subs" | jq -r '
+printf '%s' "$_subs" | jq -r --arg guid "$_guid" '
 	(.value // []) |
 	if length == 0 then
 		"  (no active submissions)"
 	else
 		.[] |
 		"  \(.friendlyName // "Submission") (ID: \(.id // "N/A"))",
+		(if .id then "  Live arg: submission/\($guid)/\(.id)" else empty end),
 		"  Target:  \(([.targets[]? | .value] | join(", ")) // "N/A")",
 		"  State:   \(.state // "N/A") / \(.substate // "N/A")",
 		""

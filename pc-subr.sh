@@ -187,6 +187,23 @@ pc_get_product_durable_id() {
 	printf '%s' "$_durable"
 }
 
+# Normalize a submission reference into the durable ID format expected by
+# the Product Ingestion configure schema: submission/<product-guid>/<id>
+pc_resolve_submission_durable_id() {
+	_product_durable="$1"
+	_submission_ref="$2"
+	_product_guid="${_product_durable#product/}"
+
+	case "$_submission_ref" in
+	submission/*)
+		printf '%s' "$_submission_ref"
+		;;
+	*)
+		printf 'submission/%s/%s' "$_product_guid" "$_submission_ref"
+		;;
+	esac
+}
+
 # Fetch a resource tree for a product
 # Usage: pc_get_resource_tree DURABLE_ID TARGET_TYPE
 pc_get_resource_tree() {
