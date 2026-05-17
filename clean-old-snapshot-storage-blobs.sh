@@ -117,15 +117,18 @@ case "${confirm}" in
 		for _category in "$snapshot_to_delete" "$releng_to_delete"; do
 			echo "$_category" | while IFS= read -r file; do
 				[ -z "$file" ] && continue
-				echo -n "Deleting ${file} ..."
-				az storage blob delete \
-					--account-name "${STORAGE_ACCOUNT_NAME}" \
-					--account-key "${STORAGE_ACCOUNT_KEY}" \
-					--container-name "${STORAGE_ACCOUNT_CONTAINER}" \
-					--name "$file"
-				echo " done."
+				(
+					az storage blob delete \
+						--account-name "${STORAGE_ACCOUNT_NAME}" \
+						--account-key "${STORAGE_ACCOUNT_KEY}" \
+						--container-name "${STORAGE_ACCOUNT_CONTAINER}" \
+						--name "$file" \
+						&& echo "Deleted ${file}." \
+						|| echo "Failed to delete ${file}."
+				) &
 			done
 		done
+		wait
 		;;
 	*)
 		echo "Skipped deletion of all files."
