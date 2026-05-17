@@ -9,6 +9,15 @@ require STORAGE_ACCOUNT_NAME
 require STORAGE_ACCOUNT_CONTAINER
 require STORAGE_ACCOUNT_KEY
 
+# Color codes (only when writing to a terminal)
+if [ -t 1 ]; then
+	_red=$(printf '\033[31m')
+	_reset=$(printf '\033[0m')
+else
+	_red=''
+	_reset=''
+fi
+
 # Current date in seconds
 current_date=$(date +%s)
 
@@ -84,18 +93,21 @@ releng_to_delete=$(
 	'
 )
 
+echo "Images in storage:"
+printf '%s\n' "$all_blobs" | while IFS= read -r blob_name; do
+	[ -z "$blob_name" ] && continue
+	if printf '%s\n' "$snapshot_to_delete" | grep -qxF "$blob_name"; then
+		printf '  %s  %s[delete: snapshot older than 2 weeks]%s\n' "$blob_name" "$_red" "$_reset"
+	elif printf '%s\n' "$releng_to_delete" | grep -qxF "$blob_name"; then
+		printf '  %s  %s[delete: superseded by newer releng image]%s\n' "$blob_name" "$_red" "$_reset"
+	else
+		printf '  %s\n' "$blob_name"
+	fi
+done
+
 if [ -z "$snapshot_to_delete" ] && [ -z "$releng_to_delete" ]; then
 	echo "No files to delete."
 	exit 0
-fi
-
-if [ -n "$snapshot_to_delete" ]; then
-	echo "Snapshot images older than 2 weeks:"
-	echo "$snapshot_to_delete" | sed 's/^/  /'
-fi
-if [ -n "$releng_to_delete" ]; then
-	echo "Releng images superseded by a newer version:"
-	echo "$releng_to_delete" | sed 's/^/  /'
 fi
 
 printf "Do you want to delete all the listed files? (y/N): "
