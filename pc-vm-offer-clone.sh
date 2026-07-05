@@ -136,11 +136,14 @@ SRC_DOT="$(echo "$SRC_UND" | tr '_' '.')"
 echo "Source offer: ${SRC_EXTID_PARSED} (version ${SRC_DOT})"
 echo ""
 
-# Step 2b: Check termsOfUse against upstream FreeBSD license
-FREEBSD_LICENSE_URL="https://www.freebsd.org/copyright/freebsd-license/"
+# Step 2b: Check termsOfUse against upstream FreeBSD copyright text
+# Structure from freebsd-license.adoc; license text precise from src/COPYRIGHT lines 5-26;
+# "views and conclusions" paragraph from adoc line 17.
+FREEBSD_COPYRIGHT_URL="https://cgit.freebsd.org/src/plain/COPYRIGHT"
+FREEBSD_LICENSE_ADOC_URL="https://cgit.freebsd.org/doc/plain/website/content/en/copyright/freebsd-license.adoc"
 TERMS_OF_USE=""
 
-echo "Checking termsOfUse against ${FREEBSD_LICENSE_URL}..."
+echo "Checking termsOfUse against upstream FreeBSD copyright..."
 
 # Extract current termsOfUse from the source template
 _tpl_terms="$(printf '%s' "$SRC_JSON" | jq -r '
@@ -150,39 +153,34 @@ _tpl_terms="$(printf '%s' "$SRC_JSON" | jq -r '
 if [ -z "$_tpl_terms" ]; then
 	echo "  WARNING: No termsOfUse found in source template."
 else
-	# Fetch the current license from freebsd.org
-	# Extract text from <div id="contentwrap"> between <h1> and <hr>
-	_fetched_html="$(curl -fsS "$FREEBSD_LICENSE_URL" 2>/dev/null || true)"
+	# Fetch license text: header + src/COPYRIGHT lines 5-26 + adoc line 17 (views/conclusions)
+	_copyright_body="$(curl -fsS "$FREEBSD_COPYRIGHT_URL" 2>/dev/null | sed -n '5,26p' || true)"
+	_views_line="$(curl -fsS "$FREEBSD_LICENSE_ADOC_URL" 2>/dev/null | sed -n '17p' || true)"
+	if [ -n "$_copyright_body" ] && [ -n "$_views_line" ]; then
+		_fetched_raw="$(printf 'The FreeBSD Copyright\n\n%s\n\n%s\n' "$_copyright_body" "$_views_line")"
+	else
+		_fetched_raw=""
+	fi
 
-	if [ -z "$_fetched_html" ]; then
-		echo "  WARNING: Could not fetch license from ${FREEBSD_LICENSE_URL}."
+	if [ -z "$_fetched_raw" ]; then
+		echo "  WARNING: Could not fetch COPYRIGHT from ${FREEBSD_COPYRIGHT_URL}."
 		echo "           Using termsOfUse from source template as-is."
 	else
-		# Extract text: strip HTML tags, normalize whitespace
-		# Get content between <h1> and the "Legal Home" link
-		_fetched_text="$(printf '%s' "$_fetched_html" \
-			| sed -n '/<h1>The FreeBSD Copyright/,/<a href="\.\.">Legal Home/p' \
-			| sed '/<a href="\.\.">Legal Home/d' \
-			| sed 's/<[^>]*>//g' \
-			| sed 's/&amp;/\&/g; s/&lt;/</g; s/&gt;/>/g; s/&quot;/"/g; s/&#39;/'"'"'/g' \
-			| sed '/^[[:space:]]*$/d' \
-			| sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
+		# Normalize both for comparison: collapse whitespace to single spaces
+		_fetched_text="$(printf '%s' "$_fetched_raw" \
 			| tr '\n' ' ' \
 			| sed 's/  */ /g; s/^ //; s/ $//')"
 
-		# Normalize template text the same way for comparison
 		_tpl_normalized="$(printf '%s' "$_tpl_terms" \
 			| tr '\n' ' ' \
 			| sed 's/  */ /g; s/^ //; s/ $//')"
 
-		# Strip copyright years and list markers for content comparison
-		# Matches patterns like "1992-2025" or "1992-2026"
-		# Also strip "1. " / "2. " list markers since HTML <ol><li> doesn't include them
+		# Strip copyright years for content comparison
 		_fetched_noyear="$(printf '%s' "$_fetched_text" | sed 's/[0-9]*-[0-9]*/YEARS/g')"
-		_tpl_noyear="$(printf '%s' "$_tpl_normalized" | sed 's/[0-9]*-[0-9]*/YEARS/g; s/ [0-9]\. / /g')"
+		_tpl_noyear="$(printf '%s' "$_tpl_normalized" | sed 's/[0-9]*-[0-9]*/YEARS/g')"
 
 		if [ "$_fetched_noyear" = "$_tpl_noyear" ]; then
-			# Text is the same modulo years -- check if years actually differ
+			# Text same modulo years -- check if years actually differ
 			_fetched_years="$(printf '%s' "$_fetched_text" | sed -n 's/.*Copyright \([0-9]*-[0-9]*\).*/\1/p')"
 			_tpl_years="$(printf '%s' "$_tpl_normalized" | sed -n 's/.*Copyright \([0-9]*-[0-9]*\).*/\1/p')"
 
@@ -195,34 +193,25 @@ else
 			fi
 		else
 			echo ""
-			echo "  WARNING: FreeBSD license text has changed beyond copyright years!"
+			echo "  WARNING: FreeBSD COPYRIGHT text has changed beyond copyright years!"
 			echo "  Template and upstream differ. Please review."
 			echo ""
 
 			# Show diff
-			_tmp_tpl="$(mktemp)"
-			_tmp_web="$(mktemp)"
+			_tmp_tpl="$(mktemp -t tpl.XXXXXX)"
+			_tmp_web="$(mktemp -t web.XXXXXX)"
 			printf '%s\n' "$_tpl_normalized" | fmt -w 72 > "$_tmp_tpl"
 			printf '%s\n' "$_fetched_text" | fmt -w 72 > "$_tmp_web"
-			diff -u --label "template" --label "freebsd.org" "$_tmp_tpl" "$_tmp_web" || true
+			diff -u --label "template" --label "cgit" "$_tmp_tpl" "$_tmp_web" | cat -v || true
 			rm -f "$_tmp_tpl" "$_tmp_web"
 
 			echo ""
-			printf "  Use upstream license text? [y/N] "
+			printf "  Use upstream COPYRIGHT text? [y/N] "
 			read -r _use_upstream
 			case "$_use_upstream" in
 			[yY]|[yY][eE][sS])
-				# Reconstruct termsOfUse from fetched text with proper formatting
-				# Re-extract with newlines preserved
-				TERMS_OF_USE="$(printf '%s' "$_fetched_html" \
-					| sed -n '/<h1>The FreeBSD Copyright/,/<a href="\.\.">Legal Home/p' \
-					| sed '/<a href="\.\.">Legal Home/d' \
-					| sed 's/<[^>]*>//g' \
-					| sed 's/&amp;/\&/g; s/&lt;/</g; s/&gt;/>/g; s/&quot;/"/g' \
-					| sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
-					| sed '/^$/{ N; s/\n$//; }' \
-					| cat -s)"
-				echo "  Using upstream license text."
+				TERMS_OF_USE="$_fetched_raw"
+				echo "  Using upstream COPYRIGHT text."
 				;;
 			*)
 				echo "  Keeping template termsOfUse as-is."
