@@ -138,7 +138,8 @@ def replace_versions:
 
   elif $rtype == "listing-asset" then
     # listing-asset: keep URLs as-is (logos are version-independent)
-    .
+    # Normalize type to camelCase (API exports PascalCase but schema requires camelCase)
+    .type |= (.[0:1] | ascii_downcase) + .[1:]
 
   elif $rtype == "plan-listing" then
     # Determine fstype from the plan reference we already resolved
