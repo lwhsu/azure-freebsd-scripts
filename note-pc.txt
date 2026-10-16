@@ -21,6 +21,60 @@ Scripts overview:
 
 ---
 
+Prerequisite: SIG image definitions and versions
+=================================================
+
+The offer's vmImageVersions reference Shared Image Gallery (SIG) image
+versions, so they must exist BEFORE running pc-vm-offer-clone.sh.
+Otherwise the clone warns "No SIG image versions found" and generates
+an offer with empty vmImageVersions (which cannot be submitted).
+
+The VHDs must already be in the storage account (uploaded by the
+snapshot pipeline), named like:
+  FreeBSD-14.5-RELEASE-amd64-ufs.vhd
+  FreeBSD-14.5-RELEASE-amd64-zfs.vhd
+  FreeBSD-14.5-RELEASE-arm64-aarch64-ufs.vhd
+  FreeBSD-14.5-RELEASE-arm64-aarch64-zfs.vhd
+
+Check with:
+
+  ./az-storage-blob-list.sh | grep 14.5-RELEASE
+
+S1. Create the 6 image definitions (once per release)
+-----------------------------------------------------
+
+  ./create-sig-imgdef.sh 14.5-RELEASE
+
+  Creates FreeBSD-14.5-RELEASE-{amd64-ufs-gen1, amd64-zfs-gen1,
+  amd64-ufs-gen2, amd64-zfs-gen2, arm64-ufs-gen2, arm64-zfs-gen2}.
+  (Gen2 definitions are created with SecurityType=Standard.)
+  For RC/BETA testing use e.g. 14.5-RC1 as the version argument.
+
+  Verify:  ./az-sig-imgdef-list.sh | grep 14.5
+
+S2. Create the 6 image versions
+-------------------------------
+
+  ./create-sig-imgver.sh 14.5-RELEASE
+
+  The version number is today's date (GMT), e.g. 2026.1016.00. Gen1 and
+  Gen2 of the same arch/fs use the same VHD. The create runs with
+  --no-wait; replication takes a few minutes. Wait until every version
+  is "Succeeded":
+
+  ./az-sig-imgver-list.sh 14.5-RELEASE
+  az sig image-version list -g $RESOURCE_GROUP -r $GALLERY_NAME \
+    -i FreeBSD-14.5-RELEASE-amd64-ufs-gen1 \
+    --query '[].provisioningState' -o tsv
+
+  To remove wrong ones: az-sig-imgver-delete.sh, delete-sig-imgver.sh,
+  delete-sig-imgdef.sh.
+
+Then continue with the offer steps below. pc-vm-offer-clone.sh finds
+these versions automatically.
+
+---
+
 Example: Creating FreeBSD 14.4-RELEASE offer
 =============================================
 
@@ -44,7 +98,8 @@ Example: Creating FreeBSD 14.4-RELEASE offer
 
   ./pc-vm-offer-clone.sh -s freebsd-14_3 -t 14.4
 
-  This auto-discovers SIG image versions via az CLI.
+  This auto-discovers SIG image versions via az CLI (they must exist
+  already -- see "Prerequisite" above).
   Output: offer-create_freebsd-14_4.json
 
   Options:
